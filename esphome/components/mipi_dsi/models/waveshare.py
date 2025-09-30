@@ -103,3 +103,20 @@ DriverChip(
         ),
     ],
 )
+
+DriverChip(
+    "WAVESHARE-11.9-PANEL",
+    height=320,
+    width=1480,
+    hsync_back_porch=60,
+    hsync_pulse_width=60,
+    hsync_front_porch=60,
+    vsync_back_porch=12,
+    vsync_pulse_width=4,
+    vsync_front_porch=30,
+    pclk_frequency="50MHz",
+    lane_bit_rate="1Gbps",
+    swap_xy=cv.UNDEFINED,
+    color_order="RGB",
+    initsequence=[],
+)
