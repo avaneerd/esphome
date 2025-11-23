@@ -108,5 +108,6 @@ DriverChip(
     pclk_frequency="48MHz",
     lane_bit_rate="1.5Gbps",
     color_order="RGB",
+    swap_xy=true,
     initsequence=[],
 )
