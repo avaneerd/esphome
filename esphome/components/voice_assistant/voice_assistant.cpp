@@ -429,8 +429,9 @@ void VoiceAssistant::client_subscription(api::APIConnection *client, bool subscr
 
   if (this->api_client_ != nullptr) {
     ESP_LOGE(TAG, "Multiple API Clients attempting to connect to Voice Assistant");
-    ESP_LOGE(TAG, "Current client: %s", this->api_client_->get_client_combined_info().c_str());
-    ESP_LOGE(TAG, "New client: %s", client->get_client_combined_info().c_str());
+    ESP_LOGE(TAG, "Current client: %s (%s)", this->api_client_->get_name().c_str(),
+             this->api_client_->get_peername().c_str());
+    ESP_LOGE(TAG, "New client: %s (%s)", client->get_name().c_str(), client->get_peername().c_str());
     return;
   }
 
@@ -656,7 +657,8 @@ void VoiceAssistant::on_event(const api::VoiceAssistantEventResponse &msg) {
         ESP_LOGW(TAG, "No text in STT_END event");
         return;
       } else if (text.length() > 500) {
-        text = text.substr(0, 497) + "...";
+        text.resize(497);
+        text += "...";
       }
       ESP_LOGD(TAG, "Speech recognised as: \"%s\"", text.c_str());
       this->defer([this, text]() { this->stt_end_trigger_->trigger(text); });
@@ -713,7 +715,8 @@ void VoiceAssistant::on_event(const api::VoiceAssistantEventResponse &msg) {
         return;
       }
       if (text.length() > 500) {
-        text = text.substr(0, 497) + "...";
+        text.resize(497);
+        text += "...";
       }
       ESP_LOGD(TAG, "Response: \"%s\"", text.c_str());
       this->defer([this, text]() {
