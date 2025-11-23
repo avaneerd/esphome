@@ -108,6 +108,9 @@ DriverChip(
     pclk_frequency="24MHz",
     lane_bit_rate="800Mbps",
     color_order="RGB",
-    swap_xy=True,
+    transform=False,
+    swap_xy=False,
+    mirror_x=False,
+    mirror_y=False,
     initsequence=[],
 )
