@@ -24,12 +24,26 @@ static const char *const PROLOGUE_INIT = "NoiseAPIInit";
 #endif
 static constexpr size_t PROLOGUE_INIT_LEN = 12;  // strlen("NoiseAPIInit")
 
+// Maximum bytes to log in hex format (168 * 3 = 504, under TX buffer size of 512)
+static constexpr size_t API_MAX_LOG_BYTES = 168;
+
 #define HELPER_LOG(msg, ...) \
   ESP_LOGVV(TAG, "%s (%s): " msg, this->client_info_->name.c_str(), this->client_info_->peername.c_str(), ##__VA_ARGS__)
 
 #ifdef HELPER_LOG_PACKETS
-#define LOG_PACKET_RECEIVED(buffer) ESP_LOGVV(TAG, "Received frame: %s", format_hex_pretty(buffer).c_str())
-#define LOG_PACKET_SENDING(data, len) ESP_LOGVV(TAG, "Sending raw: %s", format_hex_pretty(data, len).c_str())
+#define LOG_PACKET_RECEIVED(buffer) \
+  do { \
+    char hex_buf_[format_hex_pretty_size(API_MAX_LOG_BYTES)]; \
+    ESP_LOGVV(TAG, "Received frame: %s", \
+              format_hex_pretty_to(hex_buf_, (buffer).data(), \
+                                   (buffer).size() < API_MAX_LOG_BYTES ? (buffer).size() : API_MAX_LOG_BYTES)); \
+  } while (0)
+#define LOG_PACKET_SENDING(data, len) \
+  do { \
+    char hex_buf_[format_hex_pretty_size(API_MAX_LOG_BYTES)]; \
+    ESP_LOGVV(TAG, "Sending raw: %s", \
+              format_hex_pretty_to(hex_buf_, data, (len) < API_MAX_LOG_BYTES ? (len) : API_MAX_LOG_BYTES)); \
+  } while (0)
 #else
 #define LOG_PACKET_RECEIVED(buffer) ((void) 0)
 #define LOG_PACKET_SENDING(data, len) ((void) 0)
@@ -239,12 +253,13 @@ APIError APINoiseFrameHelper::state_action_() {
   }
   if (state_ == State::SERVER_HELLO) {
     // send server hello
+    constexpr size_t mac_len = 13;  // 12 hex chars + null terminator
     const std::string &name = App.get_name();
-    const std::string &mac = get_mac_address();
+    char mac[mac_len];
+    get_mac_address_into_buffer(mac);
 
     // Calculate positions and sizes
     size_t name_len = name.size() + 1;  // including null terminator
-    size_t mac_len = mac.size() + 1;    // including null terminator
     size_t name_offset = 1;
     size_t mac_offset = name_offset + name_len;
     size_t total_size = 1 + name_len + mac_len;
@@ -257,7 +272,7 @@ APIError APINoiseFrameHelper::state_action_() {
     // node name, terminated by null byte
     std::memcpy(msg.get() + name_offset, name.c_str(), name_len);
     // node mac, terminated by null byte
-    std::memcpy(msg.get() + mac_offset, mac.c_str(), mac_len);
+    std::memcpy(msg.get() + mac_offset, mac, mac_len);
 
     aerr = write_frame_(msg.get(), total_size);
     if (aerr != APIError::OK)
@@ -406,8 +421,7 @@ APIError APINoiseFrameHelper::read_packet(ReadPacketBuffer *buffer) {
     return APIError::BAD_DATA_PACKET;
   }
 
-  buffer->container = std::move(this->rx_buf_);
-  buffer->data_offset = 4;
+  buffer->data = msg_data + 4;  // Skip 4-byte header (type + length)
   buffer->data_len = data_len;
   buffer->type = type;
   return APIError::OK;
@@ -527,7 +541,7 @@ APIError APINoiseFrameHelper::init_handshake_() {
   if (aerr != APIError::OK)
     return aerr;
 
-  const auto &psk = ctx_->get_psk();
+  const auto &psk = this->ctx_.get_psk();
   err = noise_handshakestate_set_pre_shared_key(handshake_, psk.data(), psk.size());
   aerr = handle_noise_error_(err, LOG_STR("noise_handshakestate_set_pre_shared_key"),
                              APIError::HANDSHAKESTATE_SETUP_FAILED);
@@ -539,7 +553,8 @@ APIError APINoiseFrameHelper::init_handshake_() {
   if (aerr != APIError::OK)
     return aerr;
   // set_prologue copies it into handshakestate, so we can get rid of it now
-  prologue_ = {};
+  // Use swap idiom to actually release memory (= {} only clears size, not capacity)
+  std::vector<uint8_t>().swap(prologue_);
 
   err = noise_handshakestate_start(handshake_);
   aerr = handle_noise_error_(err, LOG_STR("noise_handshakestate_start"), APIError::HANDSHAKESTATE_SETUP_FAILED);
